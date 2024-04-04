@@ -245,35 +245,33 @@ class Network(nn.Module):
     ) -> None:
         super().__init__()
         # self.encoder = Encoder(backbone, pretrained)
-        # self.encoder = vit_small(patch_size=16, num_classes=21, in_chans=13)
-        self.encoder = SwinTransformer(
-            img_size=224,
-            patch_size=16,
-            in_chans=13,
-            embed_dim=384,
-            depths=[2, 2, 18, 2],
-            num_heads=[3, 6, 12, 24],
-            window_size=7,
-            mlp_ratio=4.,
-            qkv_bias=True,
-            qk_scale=None,
-            drop_rate=0,
-            ape=False,
-            patch_norm=True,
-            use_checkpoint=False,
-            norm_befor_mlp='ln',
-        )
+        self.encoder = vit_small(patch_size=16, num_classes=21, in_chans=13)
+        # self.encoder = SwinTransformer(
+        #     img_size=224,
+        #     patch_size=16,
+        #     in_chans=13,
+        #     embed_dim=384,
+        #     depths=[2, 2, 18, 2],
+        #     num_heads=[3, 6, 12, 24],
+        #     window_size=7,
+        #     mlp_ratio=4.,
+        #     qkv_bias=True,
+        #     qk_scale=None,
+        #     drop_rate=0,
+        #     ape=False,
+        #     patch_norm=True,
+        #     use_checkpoint=False,
+        #     norm_befor_mlp='ln',
+        # )
 
-
-
-# self.encoder = vit_small(patch_size=16, num_classes=21, in_chans=3)
-#         if pretrained:
-#             load_pretrained_weights(
-#                 self.encoder,
-#                 '/gpfs/work5/0/prjs0790/data/run_outputs/checkpoints/ssl4eo_ssl/ssl_s2c_new_transforms/checkpoint0095.pth',
-#                 'teacher'
-#             )
-        self.projector = MLP(self.encoder.embed_dim, 300, output_dim)
+        # self.encoder = vit_small(patch_size=16, num_classes=21, in_chans=3)
+        if pretrained:
+            load_pretrained_weights(
+                self.encoder,
+                '/gpfs/work5/0/prjs0790/data/run_outputs/checkpoints/ssl4eo_ssl/ssl_s2c_new_transforms/checkpoint0095.pth',
+                'teacher'
+            )
+        # self.projector = MLP(self.encoder.embed_dim, 300, output_dim)
         self.mask_pool = MaskPooling(num_classes, num_samples, downsample)
 
     # def forward(self, x: torch.Tensor, masks: torch.Tensor) -> Sequence[torch.Tensor]:
@@ -293,7 +291,8 @@ class Network(nn.Module):
         e = e[:, 1:, :]
         # e = rearrange(e, "b c h w -> b (h w) c")
         e = m.reshape(nb, ns, -1) @ e
-        p = self.projector(e)
+        # p = self.projector(e)
+        p = None
         return e, p, m, mids
 
 
@@ -430,7 +429,7 @@ class DetConB(pl.LightningModule):
             p.requires_grad = False
 
         # self.ema = ExponentialMovingAverage(self.network.parameters(), decay=0.995)
-        self.predictor = MLP(256, 256, 256)
+        # self.predictor = MLP(256, 256, 256)
         # self.enc_mlp = MLP(384, 384, 384)
 
 
@@ -510,13 +509,13 @@ class DetConB(pl.LightningModule):
         return F.one_hot(mask.argmax(1), num_classes=self.num_classes).permute(0, 3, 1, 2).float()
 
     def training_step(self, batch: Dict, batch_idx: int) -> torch.Tensor:
-        if self.step_count == 0:
-            for n, p in self.online_network.encoder.named_parameters():
-                if n not in ['head.weight', 'head.bias']:
-                    p.requires_grad = False
-        elif self.step_count == 100:
-            for n, p in self.online_network.encoder.named_parameters():
-                p.requires_grad = True
+        # if self.step_count == 0:
+        #     for n, p in self.online_network.encoder.named_parameters():
+        #         if n not in ['head.weight', 'head.bias']:
+        #             p.requires_grad = False
+        # elif self.step_count == 100:
+        #     for n, p in self.online_network.encoder.named_parameters():
+        #         p.requires_grad = True
 
         self.step_count += 1
 
@@ -550,23 +549,31 @@ class DetConB(pl.LightningModule):
         # (x1, x2), (y1, y2) = batch["image"], batch["mask"]
 
         # encode and project
-        _, p1, _, ids1 = self(x_aug1, masks_1)
-        _, p2, _, ids2 = self(x_aug2, masks_2)
+        # _, p1, _, ids1 = self(x_aug1, masks_1)
+        # _, p2, _, ids2 = self(x_aug2, masks_2)
+        e1, _, _, ids1 = self(x_aug1, masks_1)
+        e2, _, _, ids2 = self(x_aug2, masks_2)
 
         # # ema encode and project
         # with self.ema.average_parameters():
-        _, ema_p1, _, ema_ids1 = self(x_aug1, masks_1, ema=True)
-        _, ema_p2, _, ema_ids2 = self(x_aug2, masks_2, ema=True)
+        # _, ema_p1, _, ema_ids1 = self(x_aug1, masks_1, ema=True)
+        # _, ema_p2, _, ema_ids2 = self(x_aug2, masks_2, ema=True)
+        ema_e1, _, _, ema_ids1 = self(x_aug1, masks_1, ema=True)
+        ema_e2, _, _, ema_ids2 = self(x_aug2, masks_2, ema=True)
 
-        # predict
-        q1, q2 = self.predictor(p1), self.predictor(p2)
+        # # predict
+        # q1, q2 = self.predictor(p1), self.predictor(p2)
 
         # compute loss
         loss = self.loss_fn(
-            pred1=q1,
-            pred2=q2,
-            target1=ema_p1.detach(),
-            target2=ema_p2.detach(),
+            # pred1=q1,
+            # pred2=q2,
+            # target1=ema_p1.detach(),
+            # target2=ema_p2.detach(),
+            pred1=e1,
+            pred2=e2,
+            target1=ema_e1.detach(),
+            target2=ema_e2.detach(),
             pind1=ids1,
             pind2=ids2,
             tind1=ema_ids1,
