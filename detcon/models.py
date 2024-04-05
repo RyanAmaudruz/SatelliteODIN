@@ -461,7 +461,7 @@ class DetConB(pl.LightningModule):
             # normalize,
         ])
         self.augment1 = DEFAULT_AUG
-        self.augment2 = transforms.Compose([DEFAULT_AUG, transforms.RandomApply([Solarize()], p=0.1)])
+        self.augment2 = transforms.Compose([DEFAULT_AUG, transforms.RandomApply([Solarize()], p=0.2)])
         self.crop_flip = transforms.Compose([
             # transforms.RandomResizedCrop(size=(224, 224), scale=(0.08, 1)),
             Custom_Transform(224),

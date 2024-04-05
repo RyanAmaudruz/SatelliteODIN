@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --nodes=1
-#SBATCH --ntasks=4
+#SBATCH --ntasks=1
 #SBATCH --cpus-per-task=18
-#SBATCH --gpus=4
+#SBATCH --gpus=1
 #SBATCH --partition=gpu
 #SBATCH --time=20:00:00
 #SBATCH --output=odin.out

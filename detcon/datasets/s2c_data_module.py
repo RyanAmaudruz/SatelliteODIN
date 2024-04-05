@@ -28,6 +28,10 @@ S2C_MEAN_NEW_NP = np.array(S2C_MEAN_NEW).reshape(1, -1, 1, 1)
 
 S2C_STD_NEW_NP = np.array(S2C_STD_NEW).reshape(1, -1, 1, 1)
 
+S2C_MEAN_NEW_NP_F = torch.from_numpy(S2C_MEAN_NEW_NP / 255).to('cuda', torch.float32)
+
+S2C_STD_NEW_NP_F = torch.from_numpy(S2C_STD_NEW_NP / 255).to('cuda', torch.float32)
+
 class S2cDataModule(pl.LightningDataModule):
 
     def __init__(self,
@@ -95,6 +99,10 @@ class UnlabelledSc2(Dataset):
         with h5py.File('/gpfs/scratch1/shared/ramaudruz/s2c_un/s2c_264_light_new.h5', 'r') as f:
             data = np.array(f.get(patch_id))
 
+
+        # data_normalised = normalize(data, S2C_MEAN_NEW_NP, S2C_STD_NEW_NP)
+
+
         # data = data.astype('float32')
 
         # for i, (s2c_mean, s2c_std) in enumerate(zip(S2C_MEAN_NEW, S2C_STD_NEW)):
@@ -103,10 +111,20 @@ class UnlabelledSc2(Dataset):
         # image = Image.open(img_path).convert('RGB')
         # if self.transform:
         #     image = self.transform(data)
+        # return self.to_tensor(
+        #     self.resize_trans(np.transpose(data_normalised[np.random.choice([0,1,2,3]),:,:,:], (1, 2, 0)))
+        # )
         return self.to_tensor(
             self.resize_trans(np.transpose(data[np.random.choice([0,1,2,3]),:,:,:], (1, 2, 0)))
         )
 
+
+def normalize(img, mean, std):
+    min_value = mean - 2 * std
+    max_value = mean + 2 * std
+    img = (img - min_value) / (max_value - min_value) * 255.0
+    img = np.clip(img, 0, 255).astype(np.uint8)
+    return img
 
 
 
@@ -251,7 +269,8 @@ class RandomHue(object):
 
     def __call__(self, sample):
         rgb_channels = (sample[:, 1:4, :, :].flip(1) * 255).long()
-        rgb_channels_hue_mod = adjust_hue(rgb_channels, hue_factor=self.hue)
+        h = np.random.uniform(0 - self.hue, self.hue)
+        rgb_channels_hue_mod = adjust_hue(rgb_channels, hue_factor=h)
         rgb_channels_hue_mod_sca = rgb_channels_hue_mod / 255
         sample[:, 1:4, :, :] = rgb_channels_hue_mod_sca.flip(1)
         return sample
@@ -297,6 +316,7 @@ class GaussianBlur(object):
         return self.transform(x)
 
 
+
 class Solarize(object):
 
     def __init__(self, threshold=0.5):
@@ -304,7 +324,12 @@ class Solarize(object):
 
     def __call__(self, x):
         x1 = x.clone()
+        # to_change = x > S2C_MEAN_NEW_NP_F
+        # new_values = S2C_MEAN_NEW_NP_F - (x - S2C_MEAN_NEW_NP_F)
+        # x1[to_change] = new_values[to_change]
+        # return x1
         one = torch.ones(x.shape).to('cuda')
-        x1[x<self.threshold] = one[x<self.threshold] - x[x<self.threshold]
+        # x1[x<self.threshold] = one[x<self.threshold] - x[x<self.threshold]
+        x1[x>self.threshold] = one[x>self.threshold] - x[x>self.threshold]
         return x1
 

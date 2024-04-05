@@ -86,8 +86,8 @@ plt.show()
 
 
 # Set index
-image_index = -3
-brightness_factor=2
+image_index = -4
+brightness_factor=1
 
 ####################################
 
@@ -110,7 +110,7 @@ colour_map = {
 import numpy as np
 import matplotlib.pyplot as plt
 
-img_0 = x_aug1[image_index]
+img_0 = batch[image_index]
 img_0_np = np.flip((img_0.to('cpu').numpy() * 255)[1:4, :, :], 0)
 
 img_0_np_bright = (img_0_np * brightness_factor).clip(0, 255).astype(int)
