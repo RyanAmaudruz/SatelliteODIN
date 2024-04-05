@@ -61,7 +61,7 @@ def main(cfg_path: str, cfg: DictConfig) -> None:
     trainer = pl.Trainer(
         callbacks=callbacks,
         logger=WandbLogger(log_model="all"),
-        # accumulate_grad_batches=20,
+        accumulate_grad_batches=3,
         gradient_clip_val=1,
         **cfg.trainer
     )

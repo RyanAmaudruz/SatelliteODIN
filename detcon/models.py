@@ -13,9 +13,8 @@ from torchvision import transforms
 import os
 import pickle
 
-from detcon.swin.swin_transformer import SwinTransformer
 
-os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 from torchvision.transforms import InterpolationMode
 
@@ -271,7 +270,7 @@ class Network(nn.Module):
                 '/gpfs/work5/0/prjs0790/data/run_outputs/checkpoints/ssl4eo_ssl/ssl_s2c_new_transforms/checkpoint0095.pth',
                 'teacher'
             )
-        # self.projector = MLP(self.encoder.embed_dim, 300, output_dim)
+        self.projector = MLP(self.encoder.embed_dim, 300, output_dim)
         self.mask_pool = MaskPooling(num_classes, num_samples, downsample)
 
     # def forward(self, x: torch.Tensor, masks: torch.Tensor) -> Sequence[torch.Tensor]:
@@ -291,8 +290,7 @@ class Network(nn.Module):
         e = e[:, 1:, :]
         # e = rearrange(e, "b c h w -> b (h w) c")
         e = m.reshape(nb, ns, -1) @ e
-        # p = self.projector(e)
-        p = None
+        p = self.projector(e)
         return e, p, m, mids
 
 
@@ -429,17 +427,12 @@ class DetConB(pl.LightningModule):
             p.requires_grad = False
 
         # self.ema = ExponentialMovingAverage(self.network.parameters(), decay=0.995)
-        # self.predictor = MLP(256, 256, 256)
+        self.predictor = MLP(256, 256, 256)
         # self.enc_mlp = MLP(384, 384, 384)
 
 
         flip_and_color_jitter = transforms.Compose([
-            # transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomApply([
-                # RandomBrightness(0.8),
-                # RandomContrast(0.8),
-                # RandomSaturation(0.8),
-                # RandomHue(0.2)
                 RandomBrightness(0.4),
                 RandomContrast(0.4),
                 RandomSaturation(0.2),
@@ -463,12 +456,12 @@ class DetConB(pl.LightningModule):
             # transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.2, 0.1)], p=0.8),
             # transforms.RandomApply([ToGray(13)], p=0.2),
             transforms.RandomApply([GaussianBlur([.1, 2.])], p=0.1),
-            transforms.RandomApply([Solarize()], p=0.2),
+            # transforms.RandomApply([Solarize()], p=0.2),
             # transforms.RandomApply([torchvision.transforms.RandomSolarize(0.5)], p=0.2),
             # normalize,
         ])
         self.augment1 = DEFAULT_AUG
-        self.augment2 = DEFAULT_AUG
+        self.augment2 = transforms.Compose([DEFAULT_AUG, transforms.RandomApply([Solarize()], p=0.1)])
         self.crop_flip = transforms.Compose([
             # transforms.RandomResizedCrop(size=(224, 224), scale=(0.08, 1)),
             Custom_Transform(224),
@@ -549,31 +542,23 @@ class DetConB(pl.LightningModule):
         # (x1, x2), (y1, y2) = batch["image"], batch["mask"]
 
         # encode and project
-        # _, p1, _, ids1 = self(x_aug1, masks_1)
-        # _, p2, _, ids2 = self(x_aug2, masks_2)
-        e1, _, _, ids1 = self(x_aug1, masks_1)
-        e2, _, _, ids2 = self(x_aug2, masks_2)
+        _, p1, _, ids1 = self(x_aug1, masks_1)
+        _, p2, _, ids2 = self(x_aug2, masks_2)
 
         # # ema encode and project
         # with self.ema.average_parameters():
-        # _, ema_p1, _, ema_ids1 = self(x_aug1, masks_1, ema=True)
-        # _, ema_p2, _, ema_ids2 = self(x_aug2, masks_2, ema=True)
-        ema_e1, _, _, ema_ids1 = self(x_aug1, masks_1, ema=True)
-        ema_e2, _, _, ema_ids2 = self(x_aug2, masks_2, ema=True)
+        _, ema_p1, _, ema_ids1 = self(x_aug1, masks_1, ema=True)
+        _, ema_p2, _, ema_ids2 = self(x_aug2, masks_2, ema=True)
 
-        # # predict
-        # q1, q2 = self.predictor(p1), self.predictor(p2)
+        # predict
+        q1, q2 = self.predictor(p1), self.predictor(p2)
 
         # compute loss
         loss = self.loss_fn(
-            # pred1=q1,
-            # pred2=q2,
-            # target1=ema_p1.detach(),
-            # target2=ema_p2.detach(),
-            pred1=e1,
-            pred2=e2,
-            target1=ema_e1.detach(),
-            target2=ema_e2.detach(),
+            pred1=q1,
+            pred2=q2,
+            target1=ema_p1.detach(),
+            target2=ema_p2.detach(),
             pind1=ids1,
             pind2=ids2,
             tind1=ema_ids1,
