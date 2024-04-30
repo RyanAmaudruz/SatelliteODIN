@@ -1,7 +1,7 @@
 module:
     backbone: vit_small
     pretrained: True
-    num_classes: 9
+    num_classes: 10
     num_samples: 4
     downsample: 16
     proj_hidden_dim: 128
@@ -10,6 +10,7 @@ module:
 datamodule:
     root: /mnt/e/data/
 #    batch_size: 208
+#    batch_size: 104
     batch_size: 104
 #    batch_size: 52
 #    batch_size: 48

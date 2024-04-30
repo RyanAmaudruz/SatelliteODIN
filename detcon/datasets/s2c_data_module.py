@@ -15,6 +15,8 @@ import h5py
 import torchvision
 from torchvision.transforms.functional import adjust_hue, InterpolationMode, to_pil_image
 from cvtorchvision import cvtransforms
+from torchvision import transforms
+import time
 
 S2C_MEAN = [1605.57504906, 1390.78157673, 1314.8729939, 1363.52445545, 1549.44374991, 2091.74883118, 2371.7172463, 2299.90463006, 2560.29504086, 830.06605044, 22.10351321, 2177.07172323, 1524.06546312]
 
@@ -90,6 +92,22 @@ class UnlabelledSc2(Dataset):
         # self.resize_trans = cvtransforms.RandomResizedCrop(224, scale=global_crops_scale, interpolation=InterpolationMode.BICUBIC)
         self.resize_trans = cvtransforms.RandomResizedCrop(448, scale=global_crops_scale, interpolation='BICUBIC')
         self.to_tensor = cvtransforms.ToTensor()
+        flip_and_color_jitter = cvtransforms.Compose([
+            cvtransforms.RandomApply([
+                RandomBrightness(0.4),
+                RandomContrast(0.4),
+                RandomSaturation(0.2),
+                RandomHue(0.1)
+            ], p=0.8),
+            cvtransforms.RandomApply([ToGray(13)], p=0.2),
+        ])
+
+        DEFAULT_AUG = cvtransforms.Compose([
+            flip_and_color_jitter,
+            cvtransforms.RandomApply([GaussianBlur([.1, 2.])], p=0.1),
+            ])
+        self.augment1 = DEFAULT_AUG
+        self.augment2 = cvtransforms.Compose([DEFAULT_AUG, cvtransforms.RandomApply([Solarize()], p=0.2)])
 
     def __len__(self):
         return len(self.file_names)
@@ -98,6 +116,18 @@ class UnlabelledSc2(Dataset):
         patch_id = self.file_names[idx]
         with h5py.File('/gpfs/scratch1/shared/ramaudruz/s2c_un/s2c_264_light_new.h5', 'r') as f:
             data = np.array(f.get(patch_id))
+
+        img_raw = self.to_tensor(
+            self.resize_trans(np.transpose(data[np.random.choice([0,1,2,3]),:,:,:], (1, 2, 0)))
+        )
+
+        # img_tra1 = self.augment1(img_raw[None, :, : :])[0]
+        # img_tra2 = self.augment2(img_raw[None, :, : :])[0]
+
+        # return img_raw, img_tra1, img_tra2
+
+        return img_raw
+
 
 
         # data_normalised = normalize(data, S2C_MEAN_NEW_NP, S2C_STD_NEW_NP)
@@ -114,10 +144,20 @@ class UnlabelledSc2(Dataset):
         # return self.to_tensor(
         #     self.resize_trans(np.transpose(data_normalised[np.random.choice([0,1,2,3]),:,:,:], (1, 2, 0)))
         # )
-        return self.to_tensor(
-            self.resize_trans(np.transpose(data[np.random.choice([0,1,2,3]),:,:,:], (1, 2, 0)))
-        )
+        # return self.to_tensor(
+        #     self.resize_trans(np.transpose(data[np.random.choice([0,1,2,3]),:,:,:], (1, 2, 0)))
+        # )
 
+
+def print_time_dec(func):
+    def wrap(*args, **kwargs):
+        start = time.time()
+        print(f'{func.__name__} starting!')
+        result = func(*args, **kwargs)
+        end = time.time()
+        print(f'{func.__name__} took {np.round(end - start, 1)}s!')
+        return result
+    return wrap
 
 def normalize(img, mean, std):
     min_value = mean - 2 * std
@@ -257,6 +297,7 @@ class RandomSaturation(object):
         self.saturation = saturation
 
     def __call__(self, sample):
+
         s = np.random.uniform(max(0, 1 - self.saturation), 1 + self.saturation)
         mean = sample.mean(axis=1)[:, None, :, :]
         return ((sample - mean) * s + mean).clip(0, 1)
@@ -268,10 +309,10 @@ class RandomHue(object):
         self.hue = hue
 
     def __call__(self, sample):
-        rgb_channels = (sample[:, 1:4, :, :].flip(1) * 255).long()
+        rgb_channels = sample[:, 1:4, :, :].flip(1)
         h = np.random.uniform(0 - self.hue, self.hue)
         rgb_channels_hue_mod = adjust_hue(rgb_channels, hue_factor=h)
-        rgb_channels_hue_mod_sca = rgb_channels_hue_mod / 255
+        rgb_channels_hue_mod_sca = rgb_channels_hue_mod
         sample[:, 1:4, :, :] = rgb_channels_hue_mod_sca.flip(1)
         return sample
 
@@ -324,12 +365,9 @@ class Solarize(object):
 
     def __call__(self, x):
         x1 = x.clone()
-        # to_change = x > S2C_MEAN_NEW_NP_F
-        # new_values = S2C_MEAN_NEW_NP_F - (x - S2C_MEAN_NEW_NP_F)
-        # x1[to_change] = new_values[to_change]
-        # return x1
-        one = torch.ones(x.shape).to('cuda')
-        # x1[x<self.threshold] = one[x<self.threshold] - x[x<self.threshold]
-        x1[x>self.threshold] = one[x>self.threshold] - x[x>self.threshold]
+        one = torch.ones(x.shape, device='cuda')
+        bool_check = x > self.threshold
+        x1[bool_check] = one[bool_check] - x[bool_check]
         return x1
+
 

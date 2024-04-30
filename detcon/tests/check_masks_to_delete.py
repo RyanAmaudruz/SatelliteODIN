@@ -62,6 +62,26 @@ plt.show()
 
 
 
+
+# Set index
+image_index = -4
+brightness_factor=1
+
+
+# To run
+import numpy as np
+import matplotlib.pyplot as plt
+
+img_0 = rgb_chanels_new2[image_index]
+img_0_np = np.flip((img_0.to('cpu').numpy()), 0)
+
+img_0_np_bright = (img_0_np * brightness_factor).clip(0, 255).astype(int)
+
+plt.imshow(np.transpose(img_0_np_bright, (1, 2, 0)))
+plt.show()
+
+
+
 #
 # img_0 = x_aug1[image_index]
 # img_0_np = np.flip((img_0.to('cpu').numpy() * 255)[1:4, :, :], 0)
@@ -87,36 +107,26 @@ plt.show()
 
 # Set index
 image_index = -4
-brightness_factor=1
+brightness_factor=2
 
-####################################
-
-colour_map = {
-    0: (15,82,186),
-    1: (80,200,120),
-    2: (128,0,128),
-    3: (224,17,95),
-    4: (0,0,128),
-    5: (145, 149, 246),
-    6: (249, 240, 122),
-    7: (251, 136, 180),
-    8: (244,96,54),
-    9: (49,73,94),
-    10: (138,145,188),
-    11: (137,147,124)
-}
 
 # To run
 import numpy as np
 import matplotlib.pyplot as plt
 
-img_0 = batch[image_index]
+img_0 = sample[image_index]
 img_0_np = np.flip((img_0.to('cpu').numpy() * 255)[1:4, :, :], 0)
 
 img_0_np_bright = (img_0_np * brightness_factor).clip(0, 255).astype(int)
 
 plt.imshow(np.transpose(img_0_np_bright, (1, 2, 0)))
 plt.show()
+
+
+
+
+
+
 
 mask = masks_1[image_index]
 mask_index = mask.to('cpu').argmax(0)

@@ -5,7 +5,7 @@ import shutil
 import pytorch_lightning as pl
 from omegaconf import DictConfig, OmegaConf
 import pandas as pd
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.loggers import WandbLogger
 
 from detcon.datasets import VOCSSLDataModule
@@ -14,6 +14,8 @@ from detcon.datasets.s2c_data_module import S2cDataModule
 from detcon.datasets.transforms import default_ssl_augs
 from detcon.models import DetConB
 import datetime
+
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 
 def main(cfg_path: str, cfg: DictConfig) -> None:
@@ -34,6 +36,8 @@ def main(cfg_path: str, cfg: DictConfig) -> None:
         num_workers=cfg['datamodule']['num_workers'],
         num_images=num_images
     )
+
+    module.n_iterations = cfg['trainer']['max_epochs'] * len(datamodule)
 
     # datamodule = ImagenetteDataModule(
     #     train_transforms=default_ssl_augs,
@@ -56,7 +60,9 @@ def main(cfg_path: str, cfg: DictConfig) -> None:
         verbose=True,
         every_n_epochs=1
     )
-    callbacks = [checkpoint_callback]
+    lr_monitor = LearningRateMonitor(logging_interval='step')
+
+    callbacks = [checkpoint_callback, lr_monitor]
 
     trainer = pl.Trainer(
         callbacks=callbacks,

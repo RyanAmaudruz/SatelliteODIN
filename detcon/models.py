@@ -469,17 +469,21 @@ class DetConB(pl.LightningModule):
             transforms.RandomHorizontalFlip()
         ])
 
+        self.n_iterations = None
+
     def configure_optimizers(self) -> torch.optim.Optimizer:
         proj_params = {'params': [p for n, p in self.named_parameters() if 'projector' in n], 'lr': 1e-3}
         pred_params = {'params': [p for n, p in self.named_parameters() if 'predictor' in n], 'lr': 1e-3}
         encoder_params = {'params': [p for n, p in self.named_parameters() if 'encoder' in n], 'lr': 1e-4}
         # enc_mlp_params = {'params': [p for n, p in self.named_parameters() if 'enc_mlp' in n], 'lr': 1e-3}
 
-        return torch.optim.Adam(
+        optimizer = torch.optim.Adam(
             # [proj_params, pred_params, encoder_params, enc_mlp_params],
             [proj_params, pred_params, encoder_params],
             lr=1e-3
         )
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.n_iterations)
+        return {"optimizer": optimizer, "lr_scheduler": scheduler}
         # return torch.optim.Adam(self.parameters(), lr=1e-3)
 
     def on_before_zero_grad(self, *args, **kwargs):
@@ -502,15 +506,17 @@ class DetConB(pl.LightningModule):
         return F.one_hot(mask.argmax(1), num_classes=self.num_classes).permute(0, 3, 1, 2).float()
 
     def training_step(self, batch: Dict, batch_idx: int) -> torch.Tensor:
-        # if self.step_count == 0:
-        #     for n, p in self.online_network.encoder.named_parameters():
-        #         if n not in ['head.weight', 'head.bias']:
-        #             p.requires_grad = False
-        # elif self.step_count == 100:
-        #     for n, p in self.online_network.encoder.named_parameters():
-        #         p.requires_grad = True
+        if self.step_count == 0:
+            for n, p in self.online_network.encoder.named_parameters():
+                if n not in ['head.weight', 'head.bias']:
+                    p.requires_grad = False
+        elif self.step_count == 100:
+            for n, p in self.online_network.encoder.named_parameters():
+                p.requires_grad = True
 
         self.step_count += 1
+
+        # batch, x_aug1, x_aug2 = to_unpack
 
         features = self.ema_network.encoder(batch)
 
@@ -521,8 +527,11 @@ class DetConB(pl.LightningModule):
 
         _, n_masks, img_size1, img_size2 = masks.shape
 
-        x_aug1 = self.augment1(batch)
-        x_aug2 = self.augment2(batch)
+        x_aug1 = torch.concat([self.augment1(x[None, :, :, :]) for x in batch])
+        x_aug2 = torch.concat([self.augment2(x[None, :, :, :]) for x in batch])
+
+        # x_aug1 = self.augment1(batch)
+        # x_aug2 = self.augment2(batch)
 
         x_aug1_plus_mask = torch.concat([x_aug1, masks], axis=1)
         x_aug2_plus_mask = torch.concat([x_aug2, masks], axis=1)
