@@ -59,104 +59,6 @@ class MaskPooling(nn.Module):
         self.mask_ids = torch.arange(num_classes)
         self.pool = nn.AvgPool2d(kernel_size=downsample, stride=downsample)
 
-    # def pool_masks(self, masks: torch.Tensor) -> torch.Tensor:
-    #     """Create binary masks and performs mask pooling
-    #
-    #     Args:
-    #         masks: (b, 1, h, w)
-    #
-    #     Returns:
-    #         masks: (b, num_classes, d)
-    #     """
-    #     if masks.ndim < 4:
-    #         masks = masks.unsqueeze(dim=1)
-    #
-    #     masks = masks == self.mask_ids[None, :, None, None].to(masks.device)
-    #     masks = self.pool(masks.to(torch.float))
-    #     masks = rearrange(masks, "b c h w -> b c (h w)")
-    #     masks = torch.argmax(masks, dim=1)
-    #     masks = torch.eye(self.num_classes).to(masks.device)[masks]
-    #     masks = rearrange(masks, "b d c -> b c d")
-    #     return masks
-
-    def pool_masks(self, masks: torch.Tensor) -> torch.Tensor:
-        """Create binary masks and performs mask pooling
-
-        Args:
-            masks: (b, 1, h, w)
-
-        Returns:
-            masks: (b, num_classes, d)
-        """
-        if masks.ndim < 4:
-            masks = masks.unsqueeze(dim=1)
-
-        # masks = masks == self.mask_ids[None, :, None, None].to(masks.device)
-        masks = self.pool(masks.to(torch.float))
-        masks = rearrange(masks, "b c h w -> b c (h w)")
-        masks = torch.argmax(masks, dim=1)
-        masks = torch.eye(self.num_classes).to(masks.device)[masks]
-        masks = rearrange(masks, "b d c -> b c d")
-        return masks
-
-    # def pool_masks(self, masks: torch.Tensor) -> torch.Tensor:
-    #     """Create binary masks and performs mask pooling
-    #
-    #     Args:
-    #         masks: (b, 1, h, w)
-    #
-    #     Returns:
-    #         masks: (b, num_classes, d)
-    #     """
-    #     if masks.ndim < 4:
-    #         masks = masks.unsqueeze(dim=1)
-    #
-    #     # masks = masks == self.mask_ids[None, :, None, None].to(masks.device)
-    #     masks = self.pool(masks.to(torch.float))
-    #     masks = rearrange(masks, "b c h w -> b c (h w)")
-    #     masks = torch.argmax(masks, dim=1)
-    #     masks = torch.eye(self.num_classes).to(masks.device)[masks]
-    #     masks = rearrange(masks, "b d c -> b c d")
-    #     return masks
-
-    # def sample_masks(self, masks: torch.Tensor) -> torch.Tensor:
-    #     """Samples which binary masks to use in the loss.
-    #
-    #     Args:
-    #         masks: (b, num_classes, d)
-    #
-    #     Returns:
-    #         masks: (b, num_samples, d)
-    #     """
-    #     bs = masks.shape[0]
-    #
-    #     # pooled_masks = self.pool(masks)
-    #
-    #     # masks_sum = masks.sum((2, 3)) + 1e-11
-    #     # masks_sum2 = masks_sum / masks_sum.sum(dim=1, keepdim=True)
-    #     # mask_ids = torch.multinomial(masks_sum2, num_samples=self.num_samples)
-    #     # sampled_masks = torch.stack([masks[b][mask_ids[b]] for b in range(bs)])
-    #
-    #     mask_exists = torch.greater(masks.sum(dim=-1), 1e-3)
-    #     sel_masks = mask_exists.to(torch.float) + 1e-11
-    #
-    #     mask_ids = torch.multinomial(sel_masks, num_samples=self.num_samples)
-    #     sampled_masks = torch.stack([masks[b][mask_ids[b]] for b in range(bs)])
-    #
-    #
-    #     # mask_exists = torch.greater(masks.sum((2, 3)), 1e-3)
-    #     # sel_masks = mask_exists.to(torch.float) + 1e-11
-    #     #
-    #     #
-    #     # mask_exists = torch.greater(masks.sum(dim=-1), 1e-3)
-    #     # sel_masks = mask_exists.to(torch.float) + 1e-11
-    #     # # torch.multinomial handles normalizing
-    #     # sel_masks = sel_masks / sel_masks.sum(dim=1, keepdim=True)
-    #     # sel_masks = torch.softmax(sel_masks, dim=-1)
-    #     # mask_ids = torch.multinomial(sel_masks, num_samples=self.num_samples)
-    #     # sampled_masks = torch.stack([masks[b][mask_ids[b]] for b in range(bs)])
-    #     return sampled_masks, mask_ids
-
     def sample_masks(self, masks: torch.Tensor) -> torch.Tensor:
         """Samples which binary masks to use in the loss.
 
@@ -167,58 +69,11 @@ class MaskPooling(nn.Module):
             masks: (b, num_samples, d)
         """
         bs = masks.shape[0]
-
-        # pooled_masks = self.pool(masks)
-
         masks_sum = masks.sum((2, 3)) + 1e-11
         masks_sum2 = masks_sum / masks_sum.sum(dim=1, keepdim=True)
         mask_ids = torch.multinomial(masks_sum2, num_samples=self.num_samples)
         sampled_masks = torch.stack([masks[b][mask_ids[b]] for b in range(bs)])
-
-
-        # mask_exists = torch.greater(masks.sum((2, 3)), 1e-3)
-        # sel_masks = mask_exists.to(torch.float) + 1e-11
-        #
-        #
-        # mask_exists = torch.greater(masks.sum(dim=-1), 1e-3)
-        # sel_masks = mask_exists.to(torch.float) + 1e-11
-        # # torch.multinomial handles normalizing
-        # sel_masks = sel_masks / sel_masks.sum(dim=1, keepdim=True)
-        # sel_masks = torch.softmax(sel_masks, dim=-1)
-        # mask_ids = torch.multinomial(sel_masks, num_samples=self.num_samples)
-        # sampled_masks = torch.stack([masks[b][mask_ids[b]] for b in range(bs)])
         return sampled_masks, mask_ids
-
-    def sample_masks2(self, masks: torch.Tensor) -> torch.Tensor:
-
-        bs = masks.shape[0]
-
-        # Check for existing masks
-        mask_exists = (masks > 1e-3).any(-1).any(-1)
-
-        # Create mask weights (add small epsilon for numerical stability)
-        sel_masks = mask_exists.float() + 1e-8
-        sel_masks = sel_masks / sel_masks.sum(dim=1, keepdim=True)
-        sel_masks = torch.log(sel_masks)
-
-        # Sample mask indices using categorical distribution
-        dist = torch.distributions.Categorical(logits=sel_masks)
-        mask_ids = dist.sample(sample_shape=(bs, self.num_samples))
-
-        # Gather sampled masks
-        smpl_masks = torch.stack(
-            [masks[b][mask_ids[b]] for b in range(bs)]
-        )
-        return smpl_masks, mask_ids
-
-    # def forward(self, masks: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-    #     binary_masks = self.pool_masks(masks)
-    #     sampled_masks, sampled_mask_ids = self.sample_masks(binary_masks)
-    #     area = sampled_masks.sum(dim=-1, keepdim=True)
-    #     sampled_masks = sampled_masks / torch.maximum(area, torch.tensor(1.0))
-    #     return sampled_masks, sampled_mask_ids
-
-
 
 
     def forward(self, masks: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -294,9 +149,9 @@ class Network(nn.Module):
         return e, p, m, mids
 
 
-class Custom_Transform(torch.nn.Module):
+class CornerCropping(torch.nn.Module):
     """
-    TODO
+    This class handles the ODIN cropping, such that the two crops that are made come from opposing corners.
     """
 
     def __init__(self, size, scale=(0.4, 0.85), ratio=(3/4, 4/3), interpolation='BILINEAR'):
@@ -390,7 +245,7 @@ class Custom_Transform(torch.nn.Module):
 class DetConB(pl.LightningModule):
     def __init__(
         self,
-        num_classes: int = 21,
+        num_classes: int = 20,
         num_samples: int = 5,
         backbone: str = "resnet50",
         pretrained: bool = False,
@@ -464,7 +319,7 @@ class DetConB(pl.LightningModule):
         self.augment2 = transforms.Compose([DEFAULT_AUG, transforms.RandomApply([Solarize()], p=0.2)])
         self.crop_flip = transforms.Compose([
             # transforms.RandomResizedCrop(size=(224, 224), scale=(0.08, 1)),
-            Custom_Transform(224),
+            CornerCropping(224),
             transforms.RandomVerticalFlip(),
             transforms.RandomHorizontalFlip()
         ])

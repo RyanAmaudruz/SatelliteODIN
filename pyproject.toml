@@ -31,7 +31,7 @@ skip_gitignore = true
 color_output = true
 
 [tool.pytest.ini_options]
-# Skip slow tests by default
+# Skip slow visualisations by default
 addopts = "-m 'not slow'"
 filterwarnings = [
     "ignore:.*Create unlinked descriptors is going to go away.*:DeprecationWarning",
