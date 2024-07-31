@@ -45,5 +45,9 @@ We show an illustration of the ODIN framework, taken from [Object Discovery and 
 - [x] **Satellite imagery**: We make the necessary adjustments to cater for Multi-Spectral images with 13 channels.
 - [x] **Visualisations**: We added some visualisations to validate that the object detection mechanism and cropping worked as intended.
 
+## Script
+- [ODIN SSL Script](https://github.com/RyanAmaudruz/SatelliteODIN/tree/main/snellius/train_odin.sh): Run ODIN SSL on satellite imagery script.
+SatelliteODIN
+/snellius
 ## License
 This repository is released under the MIT License. The dataset and pretrained model weights are released under the CC-BY-4.0 license.
