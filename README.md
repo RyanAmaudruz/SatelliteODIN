@@ -40,7 +40,9 @@ We show an illustration of the ODIN framework, taken from [Object Discovery and 
 ![Alt Text](visuals/ODIN_framework.png)
 
 ## Contributions
-- [x] **Adaptation**: We extend the original repo, which contained the DetCon framework to the ODIN framework. This involved creating the code for the Object Detection part of the ODIN network. Furthermore, instead of a Swin backbone, we utilise a plain ViT backbone and make the necessary adjustments.
+- [x] **DetCon to ODIN conversion**: We extend the original repo, which contained the DetCon framework to the ODIN framework. This involved creating the code for the Object Detection part of the ODIN network.
+- [x] **Plain ViT backbone**: Instead of a Swin or ResNet backbone, we utilise a plain ViT backbone and make the necessary adjustments.
+- [x] **Satellite imagery**: We make the necessary adjustments to cater for Multi-Spectral images with 13 channels.
 - [x] **Visualisations**: We added some visualisations to validate that the object detection mechanism and cropping worked as intended.
 
 ## License
