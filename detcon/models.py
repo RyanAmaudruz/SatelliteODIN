@@ -13,9 +13,8 @@ from torchvision import transforms
 import os
 import pickle
 
-from detcon.swin.swin_transformer import SwinTransformer
 
-os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 from torchvision.transforms import InterpolationMode
 
@@ -60,104 +59,6 @@ class MaskPooling(nn.Module):
         self.mask_ids = torch.arange(num_classes)
         self.pool = nn.AvgPool2d(kernel_size=downsample, stride=downsample)
 
-    # def pool_masks(self, masks: torch.Tensor) -> torch.Tensor:
-    #     """Create binary masks and performs mask pooling
-    #
-    #     Args:
-    #         masks: (b, 1, h, w)
-    #
-    #     Returns:
-    #         masks: (b, num_classes, d)
-    #     """
-    #     if masks.ndim < 4:
-    #         masks = masks.unsqueeze(dim=1)
-    #
-    #     masks = masks == self.mask_ids[None, :, None, None].to(masks.device)
-    #     masks = self.pool(masks.to(torch.float))
-    #     masks = rearrange(masks, "b c h w -> b c (h w)")
-    #     masks = torch.argmax(masks, dim=1)
-    #     masks = torch.eye(self.num_classes).to(masks.device)[masks]
-    #     masks = rearrange(masks, "b d c -> b c d")
-    #     return masks
-
-    def pool_masks(self, masks: torch.Tensor) -> torch.Tensor:
-        """Create binary masks and performs mask pooling
-
-        Args:
-            masks: (b, 1, h, w)
-
-        Returns:
-            masks: (b, num_classes, d)
-        """
-        if masks.ndim < 4:
-            masks = masks.unsqueeze(dim=1)
-
-        # masks = masks == self.mask_ids[None, :, None, None].to(masks.device)
-        masks = self.pool(masks.to(torch.float))
-        masks = rearrange(masks, "b c h w -> b c (h w)")
-        masks = torch.argmax(masks, dim=1)
-        masks = torch.eye(self.num_classes).to(masks.device)[masks]
-        masks = rearrange(masks, "b d c -> b c d")
-        return masks
-
-    # def pool_masks(self, masks: torch.Tensor) -> torch.Tensor:
-    #     """Create binary masks and performs mask pooling
-    #
-    #     Args:
-    #         masks: (b, 1, h, w)
-    #
-    #     Returns:
-    #         masks: (b, num_classes, d)
-    #     """
-    #     if masks.ndim < 4:
-    #         masks = masks.unsqueeze(dim=1)
-    #
-    #     # masks = masks == self.mask_ids[None, :, None, None].to(masks.device)
-    #     masks = self.pool(masks.to(torch.float))
-    #     masks = rearrange(masks, "b c h w -> b c (h w)")
-    #     masks = torch.argmax(masks, dim=1)
-    #     masks = torch.eye(self.num_classes).to(masks.device)[masks]
-    #     masks = rearrange(masks, "b d c -> b c d")
-    #     return masks
-
-    # def sample_masks(self, masks: torch.Tensor) -> torch.Tensor:
-    #     """Samples which binary masks to use in the loss.
-    #
-    #     Args:
-    #         masks: (b, num_classes, d)
-    #
-    #     Returns:
-    #         masks: (b, num_samples, d)
-    #     """
-    #     bs = masks.shape[0]
-    #
-    #     # pooled_masks = self.pool(masks)
-    #
-    #     # masks_sum = masks.sum((2, 3)) + 1e-11
-    #     # masks_sum2 = masks_sum / masks_sum.sum(dim=1, keepdim=True)
-    #     # mask_ids = torch.multinomial(masks_sum2, num_samples=self.num_samples)
-    #     # sampled_masks = torch.stack([masks[b][mask_ids[b]] for b in range(bs)])
-    #
-    #     mask_exists = torch.greater(masks.sum(dim=-1), 1e-3)
-    #     sel_masks = mask_exists.to(torch.float) + 1e-11
-    #
-    #     mask_ids = torch.multinomial(sel_masks, num_samples=self.num_samples)
-    #     sampled_masks = torch.stack([masks[b][mask_ids[b]] for b in range(bs)])
-    #
-    #
-    #     # mask_exists = torch.greater(masks.sum((2, 3)), 1e-3)
-    #     # sel_masks = mask_exists.to(torch.float) + 1e-11
-    #     #
-    #     #
-    #     # mask_exists = torch.greater(masks.sum(dim=-1), 1e-3)
-    #     # sel_masks = mask_exists.to(torch.float) + 1e-11
-    #     # # torch.multinomial handles normalizing
-    #     # sel_masks = sel_masks / sel_masks.sum(dim=1, keepdim=True)
-    #     # sel_masks = torch.softmax(sel_masks, dim=-1)
-    #     # mask_ids = torch.multinomial(sel_masks, num_samples=self.num_samples)
-    #     # sampled_masks = torch.stack([masks[b][mask_ids[b]] for b in range(bs)])
-    #     return sampled_masks, mask_ids
-
     def sample_masks(self, masks: torch.Tensor) -> torch.Tensor:
         """Samples which binary masks to use in the loss.
 
@@ -168,58 +69,11 @@ class MaskPooling(nn.Module):
             masks: (b, num_samples, d)
         """
         bs = masks.shape[0]
-
-        # pooled_masks = self.pool(masks)
-
         masks_sum = masks.sum((2, 3)) + 1e-11
         masks_sum2 = masks_sum / masks_sum.sum(dim=1, keepdim=True)
         mask_ids = torch.multinomial(masks_sum2, num_samples=self.num_samples)
         sampled_masks = torch.stack([masks[b][mask_ids[b]] for b in range(bs)])
-
-
-        # mask_exists = torch.greater(masks.sum((2, 3)), 1e-3)
-        # sel_masks = mask_exists.to(torch.float) + 1e-11
-        #
-        #
-        # mask_exists = torch.greater(masks.sum(dim=-1), 1e-3)
-        # sel_masks = mask_exists.to(torch.float) + 1e-11
-        # # torch.multinomial handles normalizing
-        # sel_masks = sel_masks / sel_masks.sum(dim=1, keepdim=True)
-        # sel_masks = torch.softmax(sel_masks, dim=-1)
-        # mask_ids = torch.multinomial(sel_masks, num_samples=self.num_samples)
-        # sampled_masks = torch.stack([masks[b][mask_ids[b]] for b in range(bs)])
         return sampled_masks, mask_ids
-
-    def sample_masks2(self, masks: torch.Tensor) -> torch.Tensor:
-
-        bs = masks.shape[0]
-
-        # Check for existing masks
-        mask_exists = (masks > 1e-3).any(-1).any(-1)
-
-        # Create mask weights (add small epsilon for numerical stability)
-        sel_masks = mask_exists.float() + 1e-8
-        sel_masks = sel_masks / sel_masks.sum(dim=1, keepdim=True)
-        sel_masks = torch.log(sel_masks)
-
-        # Sample mask indices using categorical distribution
-        dist = torch.distributions.Categorical(logits=sel_masks)
-        mask_ids = dist.sample(sample_shape=(bs, self.num_samples))
-
-        # Gather sampled masks
-        smpl_masks = torch.stack(
-            [masks[b][mask_ids[b]] for b in range(bs)]
-        )
-        return smpl_masks, mask_ids
-
-    # def forward(self, masks: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-    #     binary_masks = self.pool_masks(masks)
-    #     sampled_masks, sampled_mask_ids = self.sample_masks(binary_masks)
-    #     area = sampled_masks.sum(dim=-1, keepdim=True)
-    #     sampled_masks = sampled_masks / torch.maximum(area, torch.tensor(1.0))
-    #     return sampled_masks, sampled_mask_ids
-
-
 
 
     def forward(self, masks: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -245,34 +99,32 @@ class Network(nn.Module):
     ) -> None:
         super().__init__()
         # self.encoder = Encoder(backbone, pretrained)
-        # self.encoder = vit_small(patch_size=16, num_classes=21, in_chans=13)
-        self.encoder = SwinTransformer(
-            img_size=224,
-            patch_size=16,
-            in_chans=13,
-            embed_dim=384,
-            depths=[2, 2, 18, 2],
-            num_heads=[3, 6, 12, 24],
-            window_size=7,
-            mlp_ratio=4.,
-            qkv_bias=True,
-            qk_scale=None,
-            drop_rate=0,
-            ape=False,
-            patch_norm=True,
-            use_checkpoint=False,
-            norm_befor_mlp='ln',
-        )
+        self.encoder = vit_small(patch_size=16, num_classes=21, in_chans=13)
+        # self.encoder = SwinTransformer(
+        #     img_size=224,
+        #     patch_size=16,
+        #     in_chans=13,
+        #     embed_dim=384,
+        #     depths=[2, 2, 18, 2],
+        #     num_heads=[3, 6, 12, 24],
+        #     window_size=7,
+        #     mlp_ratio=4.,
+        #     qkv_bias=True,
+        #     qk_scale=None,
+        #     drop_rate=0,
+        #     ape=False,
+        #     patch_norm=True,
+        #     use_checkpoint=False,
+        #     norm_befor_mlp='ln',
+        # )
 
-
-
-# self.encoder = vit_small(patch_size=16, num_classes=21, in_chans=3)
-#         if pretrained:
-#             load_pretrained_weights(
-#                 self.encoder,
-#                 '/gpfs/work5/0/prjs0790/data/run_outputs/checkpoints/ssl4eo_ssl/ssl_s2c_new_transforms/checkpoint0095.pth',
-#                 'teacher'
-#             )
+        # self.encoder = vit_small(patch_size=16, num_classes=21, in_chans=3)
+        if pretrained:
+            load_pretrained_weights(
+                self.encoder,
+                '/gpfs/work5/0/prjs0790/data/run_outputs/checkpoints/ssl4eo_ssl/ssl_s2c_new_transforms/checkpoint0095.pth',
+                'teacher'
+            )
         self.projector = MLP(self.encoder.embed_dim, 300, output_dim)
         self.mask_pool = MaskPooling(num_classes, num_samples, downsample)
 
@@ -297,9 +149,9 @@ class Network(nn.Module):
         return e, p, m, mids
 
 
-class Custom_Transform(torch.nn.Module):
+class CornerCropping(torch.nn.Module):
     """
-    TODO
+    This class handles the ODIN cropping, such that the two crops that are made come from opposing corners.
     """
 
     def __init__(self, size, scale=(0.4, 0.85), ratio=(3/4, 4/3), interpolation='BILINEAR'):
@@ -393,7 +245,7 @@ class Custom_Transform(torch.nn.Module):
 class DetConB(pl.LightningModule):
     def __init__(
         self,
-        num_classes: int = 21,
+        num_classes: int = 20,
         num_samples: int = 5,
         backbone: str = "resnet50",
         pretrained: bool = False,
@@ -435,12 +287,7 @@ class DetConB(pl.LightningModule):
 
 
         flip_and_color_jitter = transforms.Compose([
-            # transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomApply([
-                # RandomBrightness(0.8),
-                # RandomContrast(0.8),
-                # RandomSaturation(0.8),
-                # RandomHue(0.2)
                 RandomBrightness(0.4),
                 RandomContrast(0.4),
                 RandomSaturation(0.2),
@@ -464,18 +311,20 @@ class DetConB(pl.LightningModule):
             # transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.2, 0.1)], p=0.8),
             # transforms.RandomApply([ToGray(13)], p=0.2),
             transforms.RandomApply([GaussianBlur([.1, 2.])], p=0.1),
-            transforms.RandomApply([Solarize()], p=0.2),
+            # transforms.RandomApply([Solarize()], p=0.2),
             # transforms.RandomApply([torchvision.transforms.RandomSolarize(0.5)], p=0.2),
             # normalize,
         ])
         self.augment1 = DEFAULT_AUG
-        self.augment2 = DEFAULT_AUG
+        self.augment2 = transforms.Compose([DEFAULT_AUG, transforms.RandomApply([Solarize()], p=0.2)])
         self.crop_flip = transforms.Compose([
             # transforms.RandomResizedCrop(size=(224, 224), scale=(0.08, 1)),
-            Custom_Transform(224),
+            CornerCropping(224),
             transforms.RandomVerticalFlip(),
             transforms.RandomHorizontalFlip()
         ])
+
+        self.n_iterations = None
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         proj_params = {'params': [p for n, p in self.named_parameters() if 'projector' in n], 'lr': 1e-3}
@@ -483,11 +332,13 @@ class DetConB(pl.LightningModule):
         encoder_params = {'params': [p for n, p in self.named_parameters() if 'encoder' in n], 'lr': 1e-4}
         # enc_mlp_params = {'params': [p for n, p in self.named_parameters() if 'enc_mlp' in n], 'lr': 1e-3}
 
-        return torch.optim.Adam(
+        optimizer = torch.optim.Adam(
             # [proj_params, pred_params, encoder_params, enc_mlp_params],
             [proj_params, pred_params, encoder_params],
             lr=1e-3
         )
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.n_iterations)
+        return {"optimizer": optimizer, "lr_scheduler": scheduler}
         # return torch.optim.Adam(self.parameters(), lr=1e-3)
 
     def on_before_zero_grad(self, *args, **kwargs):
@@ -520,6 +371,8 @@ class DetConB(pl.LightningModule):
 
         self.step_count += 1
 
+        # batch, x_aug1, x_aug2 = to_unpack
+
         features = self.ema_network.encoder(batch)
 
         # features = self.enc_mlp(features)
@@ -529,8 +382,11 @@ class DetConB(pl.LightningModule):
 
         _, n_masks, img_size1, img_size2 = masks.shape
 
-        x_aug1 = self.augment1(batch)
-        x_aug2 = self.augment2(batch)
+        x_aug1 = torch.concat([self.augment1(x[None, :, :, :]) for x in batch])
+        x_aug2 = torch.concat([self.augment2(x[None, :, :, :]) for x in batch])
+
+        # x_aug1 = self.augment1(batch)
+        # x_aug2 = self.augment2(batch)
 
         x_aug1_plus_mask = torch.concat([x_aug1, masks], axis=1)
         x_aug2_plus_mask = torch.concat([x_aug2, masks], axis=1)

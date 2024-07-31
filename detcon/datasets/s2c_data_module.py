@@ -15,6 +15,8 @@ import h5py
 import torchvision
 from torchvision.transforms.functional import adjust_hue, InterpolationMode, to_pil_image
 from cvtorchvision import cvtransforms
+from torchvision import transforms
+import time
 
 S2C_MEAN = [1605.57504906, 1390.78157673, 1314.8729939, 1363.52445545, 1549.44374991, 2091.74883118, 2371.7172463, 2299.90463006, 2560.29504086, 830.06605044, 22.10351321, 2177.07172323, 1524.06546312]
 
@@ -28,14 +30,16 @@ S2C_MEAN_NEW_NP = np.array(S2C_MEAN_NEW).reshape(1, -1, 1, 1)
 
 S2C_STD_NEW_NP = np.array(S2C_STD_NEW).reshape(1, -1, 1, 1)
 
+S2C_MEAN_NEW_NP_F = torch.from_numpy(S2C_MEAN_NEW_NP / 255).to('cuda', torch.float32)
+
+S2C_STD_NEW_NP_F = torch.from_numpy(S2C_STD_NEW_NP / 255).to('cuda', torch.float32)
+
 class S2cDataModule(pl.LightningDataModule):
 
     def __init__(self,
                  num_workers: int,
                  batch_size: int,
                  meta_df: pd.DataFrame,
-                 train_transforms,
-                 num_images: int,
                  val_transforms = None,
                  size_val_set: int = 10):
         super().__init__()
@@ -46,7 +50,6 @@ class S2cDataModule(pl.LightningDataModule):
         self.patch_id_list = self.meta_df['patch_id'].unique().tolist()
         self.num_images = len(self.patch_id_list)
         # self.num_images = num_images
-        self.train_transforms = train_transforms
         self.val_transforms = val_transforms
         self.im_train = None
         self.im_val = None
@@ -62,7 +65,7 @@ class S2cDataModule(pl.LightningDataModule):
     def setup(self, stage: Optional[str] = None):
         # Split test set in val an test
         if stage == 'fit' or stage is None:
-            self.im_train = UnlabelledSc2(self.patch_id_list, self.train_transforms)
+            self.im_train = UnlabelledSc2(self.patch_id_list)
             assert len(self.im_train) == self.num_images
             print(f"Train size {len(self.im_train)}")
         else:
@@ -78,14 +81,29 @@ class S2cDataModule(pl.LightningDataModule):
 
 class UnlabelledSc2(Dataset):
 
-    def __init__(self, file_list, transforms):
+    def __init__(self, file_list):
         self.file_names = file_list
-        self.transform = transforms
         # global_crops_scale = (0.6, 1.0)
-        global_crops_scale = (0.2, 1.0)
+        global_crops_scale = (0.3, 1.0)
         # self.resize_trans = cvtransforms.RandomResizedCrop(224, scale=global_crops_scale, interpolation=InterpolationMode.BICUBIC)
         self.resize_trans = cvtransforms.RandomResizedCrop(448, scale=global_crops_scale, interpolation='BICUBIC')
         self.to_tensor = cvtransforms.ToTensor()
+        flip_and_color_jitter = cvtransforms.Compose([
+            cvtransforms.RandomApply([
+                RandomBrightness(0.4),
+                RandomContrast(0.4),
+                RandomSaturation(0.2),
+                RandomHue(0.1)
+            ], p=0.8),
+            cvtransforms.RandomApply([ToGray(13)], p=0.2),
+        ])
+
+        DEFAULT_AUG = cvtransforms.Compose([
+            flip_and_color_jitter,
+            cvtransforms.RandomApply([GaussianBlur([.1, 2.])], p=0.1),
+            ])
+        self.augment1 = DEFAULT_AUG
+        self.augment2 = cvtransforms.Compose([DEFAULT_AUG, cvtransforms.RandomApply([Solarize()], p=0.2)])
 
     def __len__(self):
         return len(self.file_names)
@@ -95,117 +113,19 @@ class UnlabelledSc2(Dataset):
         with h5py.File('/gpfs/scratch1/shared/ramaudruz/s2c_un/s2c_264_light_new.h5', 'r') as f:
             data = np.array(f.get(patch_id))
 
-        # data = data.astype('float32')
-
-        # for i, (s2c_mean, s2c_std) in enumerate(zip(S2C_MEAN_NEW, S2C_STD_NEW)):
-        #     data[:, i, :, :] = (data[:, i, :, :] - s2c_mean) / s2c_std
-        # img_path = self.file_names[idx]
-        # image = Image.open(img_path).convert('RGB')
-        # if self.transform:
-        #     image = self.transform(data)
-        return self.to_tensor(
+        img_raw = self.to_tensor(
             self.resize_trans(np.transpose(data[np.random.choice([0,1,2,3]),:,:,:], (1, 2, 0)))
         )
 
+        return img_raw
 
 
-
-    # def __getitem__(self, idx):
-    #     patch_id = self.file_names[idx]
-    #     with h5py.File('/gpfs/scratch1/shared/ramaudruz/s2c_un/s2c_264_light_new.h5', 'r') as f:
-    #         data = np.array(f.get(patch_id))
-    #     if self.normalize:
-    #         data = (data - S2C_MEAN_NEW_NP) / S2C_STD_NEW_NP
-    #     return self.resize_trans(torch.from_numpy(data[np.random.choice([0,1,2,3]),:,:,:])).float()
-
-
-
-
-class DataAugmentationDINO_S2(object):
-    def __init__(self, global_crops_scale, local_crops_scale, local_crops_number, season='fixed'):
-        flip_and_color_jitter = transforms.Compose([
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomApply([
-                RandomBrightness(0.4),
-                RandomContrast(0.4),
-                RandomSaturation(0.2),
-                RandomHue(0.1)
-            ], p=0.8),
-            transforms.RandomApply([ToGray(13)], p=0.2),
-        ])
-        # flip_and_color_jitter = cvtransforms.Compose([
-        #     cvtransforms.RandomHorizontalFlip(p=0.5),
-        #     cvtransforms.RandomApply([
-        #         RandomBrightness(0.4),
-        #         RandomContrast(0.4),
-        #         RandomSaturation(0.2),
-        #         RandomHue(0.1)
-        #     ], p=0.8),
-        #     cvtransforms.RandomApply([ToGray(13)], p=0.2),
-        # ])
-        # normalize = transforms.Compose([
-        #     transforms.ToTensor(),
-        #     #cvtransforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-        # ])
-
-        # first global crop
-        self.global_transfo1 = transforms.Compose([
-            transforms.RandomResizedCrop(args.in_size, scale=global_crops_scale, interpolation=InterpolationMode.BICUBIC),
-            flip_and_color_jitter,
-            transforms.RandomApply([GaussianBlur([.1, 2.])], p=1.0),
-            # normalize,
-        ])
-        # second global crop
-        self.global_transfo2 = transforms.Compose([
-            transforms.RandomResizedCrop(args.in_size, scale=global_crops_scale, interpolation=InterpolationMode.BICUBIC),
-            flip_and_color_jitter,
-            transforms.RandomApply([GaussianBlur([.1, 2.])], p=0.1),
-            transforms.RandomApply([Solarize(128)], p=0.2),
-            # normalize,
-        ])
-        # transformation for the local small crops
-        self.local_crops_number = local_crops_number
-        self.local_transfo = transforms.Compose([
-            transforms.RandomResizedCrop(96, scale=local_crops_scale, interpolation=InterpolationMode.BICUBIC),
-            flip_and_color_jitter,
-            transforms.RandomApply([GaussianBlur([.1, 2.])], p=0.5),
-            # normalize,
-        ])
-
-
-        self.season = season
-
-    def __call__(self, image):
-
-        if self.season=='augment':
-            season1 = np.random.choice([0,1,2,3])
-            season2 = np.random.choice([0,1,2,3])
-            season3 = np.random.choice([0,1,2,3])
-        elif self.season=='fixed':
-            # np.random.seed(42)
-            season1 = np.random.choice([0,1,2,3])
-            season2 = season1
-            season3 = season1
-        elif self.season=='random':
-            season1 = np.random.choice([0,1,2,3])
-            season2 = season1
-            season3 = season1
-
-        # x1 = np.transpose(image[season1,:,:,:],(1,2,0))
-        # x2 = np.transpose(image[season2,:,:,:],(1,2,0))
-        # x3 = np.transpose(image[season3,:,:,:],(1,2,0))
-
-        x1 = image[season1,:,:,:]
-        x2 = image[season2,:,:,:]
-        x3 = image[season3,:,:,:]
-
-        crops = []
-        crops.append(self.global_transfo1(x1) / 255)
-        crops.append(self.global_transfo2(x2) / 255)
-        for _ in range(self.local_crops_number):
-            crops.append(self.local_transfo(x3) / 255)
-        return crops
-
+def normalize(img, mean, std):
+    min_value = mean - 2 * std
+    max_value = mean + 2 * std
+    img = (img - min_value) / (max_value - min_value) * 255.0
+    img = np.clip(img, 0, 255).astype(np.uint8)
+    return img
 
 
 class RandomBrightness(object):
@@ -239,6 +159,7 @@ class RandomSaturation(object):
         self.saturation = saturation
 
     def __call__(self, sample):
+
         s = np.random.uniform(max(0, 1 - self.saturation), 1 + self.saturation)
         mean = sample.mean(axis=1)[:, None, :, :]
         return ((sample - mean) * s + mean).clip(0, 1)
@@ -250,10 +171,10 @@ class RandomHue(object):
         self.hue = hue
 
     def __call__(self, sample):
-        rgb_channels = (sample[:, 1:4, :, :].flip(1) * 255).long()
-        rgb_channels_hue_mod = adjust_hue(rgb_channels, hue_factor=self.hue)
-        rgb_channels_hue_mod_sca = rgb_channels_hue_mod / 255
-        sample[:, 1:4, :, :] = rgb_channels_hue_mod_sca.flip(1)
+        rgb_channels = sample[:, 1:4, :, :].flip(1)
+        h = np.random.uniform(0 - self.hue, self.hue)
+        rgb_channels_hue_mod = adjust_hue(rgb_channels, hue_factor=h)
+        sample[:, 1:4, :, :] = rgb_channels_hue_mod.flip(1)
         return sample
 
 class ToGray(object):
@@ -297,6 +218,7 @@ class GaussianBlur(object):
         return self.transform(x)
 
 
+
 class Solarize(object):
 
     def __init__(self, threshold=0.5):
@@ -304,7 +226,9 @@ class Solarize(object):
 
     def __call__(self, x):
         x1 = x.clone()
-        one = torch.ones(x.shape).to('cuda')
-        x1[x<self.threshold] = one[x<self.threshold] - x[x<self.threshold]
+        one = torch.ones(x.shape, device='cuda')
+        bool_check = x > self.threshold
+        x1[bool_check] = one[bool_check] - x[bool_check]
         return x1
+
 
