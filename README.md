@@ -47,7 +47,6 @@ We show an illustration of the ODIN framework, taken from [Object Discovery and 
 
 ## Script
 - [ODIN SSL Script](https://github.com/RyanAmaudruz/SatelliteODIN/tree/main/snellius/train_odin.sh): Run ODIN SSL on satellite imagery script.
-SatelliteODIN
-/snellius
+
 ## License
 This repository is released under the MIT License. The dataset and pretrained model weights are released under the CC-BY-4.0 license.
